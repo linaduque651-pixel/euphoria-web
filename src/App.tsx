@@ -60,7 +60,7 @@ const DEPARTAMENTOS = [
 ]
 
 const POR_PAGINA = 24
-const SERIF = "'Playfair Display', serif"
+const SERIF = "'Cormorant Garamond', serif"
 const SANS = "'Jost', sans-serif"
 const C = {
   tinta: '#14120F', crema: '#F4EFE7', arena: '#EDE5D8', borde: '#DED4C4', papel: '#FBF8F2',
@@ -98,8 +98,8 @@ function Logo({ dark = false }: { dark?: boolean }) {
     <div className="flex items-center gap-3">
       <Bolt w={11} h={18} color={dark ? C.oro : C.rojo} />
       <span
-        className="uppercase tracking-[0.05em] text-[22px] leading-none"
-        style={{ fontFamily: SERIF, fontWeight: 500, color: dark ? C.crema : C.tinta }}
+        className="uppercase tracking-[0.05em] text-[24px] leading-none"
+        style={{ fontFamily: SERIF, fontWeight: 600, color: dark ? C.crema : C.tinta }}
       >
         Euphoria
       </span>
@@ -391,7 +391,7 @@ export default function App() {
 
           <div className="flex flex-col gap-3 mb-10">
             <Etiqueta>01 · CATÁLOGO</Etiqueta>
-            <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.05, margin: 0 }}>
+            <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 'clamp(32px, 4vw, 52px)', lineHeight: 1.05, margin: 0 }}>
               Nuestras piezas
             </h2>
             {catalogo && (
@@ -482,11 +482,11 @@ export default function App() {
                     </div>
                     <div className="flex flex-col gap-3 p-4 sm:p-5" style={{ borderTop: `1px solid ${C.borde}`, flex: 1 }}>
                       <div className="flex flex-col gap-1 cursor-pointer" onClick={() => setDetalle(p)}>
-                        <h3 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 19, margin: 0, letterSpacing: '0.02em', lineHeight: 1.2 }}>{p.nombre}</h3>
+                        <h3 style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 22, margin: 0, letterSpacing: '0.02em', lineHeight: 1.2 }}>{p.nombre}</h3>
                         {p.detalle && <p style={{ fontSize: 12, color: C.gris, margin: 0, letterSpacing: '0.04em', fontWeight: 300 }}>{p.detalle}</p>}
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-auto flex-wrap">
-                        <span style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 21, color: p.disponible ? C.tinta : C.grisClaro }}>{pesos(p.precio)}</span>
+                        <span style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 23, color: p.disponible ? C.tinta : C.grisClaro }}>{pesos(p.precio)}</span>
                         {p.disponible ? (
                           <Boton onClick={() => agregar(p)} disabled={(carrito[p.id] || 0) >= p.maximo}>
                             {(carrito[p.id] || 0) >= p.maximo ? 'EN TU BOLSA' : 'AGREGAR'}
@@ -536,7 +536,7 @@ export default function App() {
         <div style={{ maxWidth: 1120 }} className="mx-auto px-6 md:px-16 py-20 md:py-28">
           <div className="flex flex-col gap-3 mb-12">
             <Etiqueta>02 · CÓMO COMPRAR</Etiqueta>
-            <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 'clamp(28px, 4vw, 44px)', lineHeight: 1.1, margin: 0 }}>
+            <h2 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 'clamp(28px, 4vw, 44px)', lineHeight: 1.1, margin: 0 }}>
               Tu pieza, en tres pasos.
             </h2>
           </div>
