@@ -69,6 +69,37 @@ const C = {
 
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO')
 
+/* ---------------- Rendimiento ---------------- */
+// Google entrega las fotos de Drive en PNG gigante (≈1,8 MB). Pedimos JPG liviano
+// al tamaño justo de la pantalla (≈70 KB): misma foto, carga ~20 veces más rápido.
+function foto(url: string, w: number) {
+  return url.replace(/=[^/=]*$/, '') + `=w${w}-rj-l82`
+}
+function fotoSet(url: string, anchos: number[]) {
+  return anchos.map(w => `${foto(url, w)} ${w}w`).join(', ')
+}
+
+// El catálogo se guarda en el navegador: quien vuelve ve la tienda al instante
+// mientras se actualiza por detrás con el inventario real.
+const CACHE_CATALOGO = 'euphoria-catalogo-v1'
+function leerCatalogoGuardado(): Catalogo | null {
+  try {
+    const raw = localStorage.getItem(CACHE_CATALOGO)
+    const d = raw ? JSON.parse(raw) : null
+    return d && d.ok && Array.isArray(d.productos) ? d : null
+  } catch {
+    return null
+  }
+}
+function guardarCatalogo(d: Catalogo) {
+  try { localStorage.setItem(CACHE_CATALOGO, JSON.stringify(d)) } catch { /* sin almacenamiento */ }
+}
+// La petición sale apenas carga el código, sin esperar a que se pinte la página.
+let catalogoEnCamino: Promise<Catalogo> | null = fetch(TIENDA_URL)
+  .then(r => r.json())
+  .then((d: Catalogo) => { if (!d.ok) throw new Error(); return d })
+catalogoEnCamino.catch(() => { /* se maneja al usarla */ })
+
 function leerCarrito(): Carrito {
   try {
     const raw = localStorage.getItem('euphoria-carrito')
@@ -127,12 +158,19 @@ function SinFoto({ nombre }: { nombre: string }) {
 }
 
 // Galería: varias fotos por producto, con flechas, puntos y deslizar en el celular.
-function Galeria({ p, grande = false }: { p: Producto; grande?: boolean }) {
+function Galeria({ p, grande = false, prioridad = false }: { p: Producto; grande?: boolean; prioridad?: boolean }) {
   const [i, setI] = useState(0)
   const [x0, setX0] = useState<number | null>(null)
+  const [cargada, setCargada] = useState(false)
   const n = p.fotos.length
+  // Al pasar el mouse o tocar, se deja lista la siguiente foto para que el cambio sea instantáneo.
+  const precargar = () => {
+    if (n < 2) return
+    const im = new Image()
+    im.src = foto(p.fotos[(i + 1) % n], grande ? 900 : 600)
+  }
   if (!n) return <SinFoto nombre={p.nombre} />
-  const ir = (d: number) => setI(v => (v + d + n) % n)
+  const ir = (d: number) => { setCargada(false); setI(v => (v + d + n) % n) }
   const flecha = (d: number) => (
     <button
       aria-label={d < 0 ? 'Foto anterior' : 'Foto siguiente'}
@@ -146,7 +184,8 @@ function Galeria({ p, grande = false }: { p: Producto; grande?: boolean }) {
   return (
     <div
       className="relative w-full h-full group"
-      onTouchStart={e => setX0(e.touches[0].clientX)}
+      onMouseEnter={precargar}
+      onTouchStart={e => { precargar(); setX0(e.touches[0].clientX) }}
       onTouchEnd={e => {
         if (x0 === null) return
         const dx = e.changedTouches[0].clientX - x0
@@ -155,11 +194,24 @@ function Galeria({ p, grande = false }: { p: Producto; grande?: boolean }) {
       }}
     >
       <img
-        src={p.fotos[i]}
+        key={p.fotos[i]}
+        src={foto(p.fotos[i], grande ? 900 : 600)}
+        srcSet={fotoSet(p.fotos[i], grande ? [600, 900, 1200] : [400, 600, 900])}
+        sizes={grande ? '(min-width: 640px) 384px, 100vw' : '(min-width: 1100px) 340px, (min-width: 1024px) 31vw, 48vw'}
         alt={`${p.nombre} · foto ${i + 1}`}
-        loading="lazy"
+        loading={prioridad || grande ? 'eager' : 'lazy'}
+        fetchPriority={prioridad ? 'high' : 'auto'}
+        decoding="async"
+        width={600}
+        height={800}
+        ref={el => { if (el?.complete && el.naturalWidth) setCargada(true) }}
+        onLoad={() => setCargada(true)}
+        onError={() => setCargada(true)}
         className={`w-full h-full object-cover ${grande ? '' : 'product-img'}`}
-        style={p.disponible ? undefined : { filter: 'grayscale(35%)' }}
+        style={{
+          opacity: cargada ? 1 : 0, transition: 'opacity .4s ease, transform .5s ease',
+          ...(p.disponible ? {} : { filter: 'grayscale(35%)' }),
+        }}
       />
       {n > 1 && (
         <>
@@ -169,7 +221,7 @@ function Galeria({ p, grande = false }: { p: Producto; grande?: boolean }) {
             {p.fotos.map((_, k) => (
               <span
                 key={k}
-                onClick={e => { e.stopPropagation(); setI(k) }}
+                onClick={e => { e.stopPropagation(); if (k !== i) { setCargada(false); setI(k) } }}
                 style={{
                   width: k === i ? 16 : 6, height: 6, cursor: 'pointer', transition: 'all .25s',
                   background: k === i ? C.crema : 'rgba(244,239,231,0.55)',
@@ -208,7 +260,7 @@ function Boton({ children, onClick, disabled = false, claro = false, full = fals
 /* ---------------- Aplicación ---------------- */
 
 export default function App() {
-  const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
+  const [catalogo, setCatalogo] = useState<Catalogo | null>(leerCatalogoGuardado)
   const [error, setError] = useState('')
   const [coleccion, setColeccion] = useState('Todas')
   const [soloDisponibles, setSoloDisponibles] = useState(false)
@@ -225,13 +277,16 @@ export default function App() {
 
   const cargar = () => {
     setError('')
-    fetch(TIENDA_URL)
+    const pedido = catalogoEnCamino || fetch(TIENDA_URL)
       .then(r => r.json())
-      .then((d: Catalogo) => {
-        if (!d.ok) throw new Error()
-        setCatalogo(d)
+      .then((d: Catalogo) => { if (!d.ok) throw new Error(); return d })
+    catalogoEnCamino = null
+    pedido
+      .then(d => { setCatalogo(d); guardarCatalogo(d) })
+      .catch(() => {
+        // Si ya hay un catálogo guardado se sigue mostrando; solo se avisa si no hay nada.
+        if (!leerCatalogoGuardado()) setError('No pudimos cargar el catálogo en este momento.')
       })
-      .catch(() => setError('No pudimos cargar el catálogo en este momento.'))
   }
   useEffect(cargar, [])
 
@@ -465,10 +520,10 @@ export default function App() {
                 </p>
               )}
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-                {visibles.map(p => (
+                {visibles.map((p, idx) => (
                   <article key={p.id} className="product-card flex flex-col" style={{ border: `1px solid ${C.borde}`, background: C.papel }}>
                     <div className="overflow-hidden relative cursor-pointer" style={{ background: C.arena, aspectRatio: '3/4' }} onClick={() => setDetalle(p)}>
-                      <Galeria p={p} />
+                      <Galeria p={p} prioridad={idx < 3} />
                       {!p.disponible && (
                         <div className="absolute top-3 right-3" style={{ background: C.tinta, color: C.crema, fontSize: 9, letterSpacing: '0.34em', padding: '6px 10px', fontFamily: SANS }}>
                           AGOTADO
@@ -670,7 +725,7 @@ export default function App() {
                   {lineas.map(({ p, cantidad }) => (
                     <div key={p.id} className="flex gap-4 py-4" style={{ borderBottom: `1px solid ${C.borde}` }}>
                       <div className="flex-none overflow-hidden" style={{ width: 64, height: 84, background: C.arena }}>
-                        {p.fotos[0] ? <img src={p.fotos[0]} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Bolt w={12} h={20} color="#D9CDB9" /></div>}
+                        {p.fotos[0] ? <img src={foto(p.fotos[0], 200)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Bolt w={12} h={20} color="#D9CDB9" /></div>}
                       </div>
                       <div className="flex-1 flex flex-col gap-1 min-w-0">
                         <span style={{ fontFamily: SERIF, fontSize: 17, lineHeight: 1.2 }}>{p.nombre}</span>
