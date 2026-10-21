@@ -18,6 +18,8 @@ type Producto = {
   detalle: string
   coleccion: string
   tipo: string
+  color?: string
+  base?: string
   precio: number
   disponible: boolean
   maximo: number
@@ -69,6 +71,12 @@ const C = {
 
 const pesos = (n: number) => '$' + Math.round(n).toLocaleString('es-CO')
 
+// Variantes de color: las filas que comparten "Código base" se muestran como un solo producto.
+const baseDe = (p: Producto) => p.base || p.id
+// Orden de las categorías en el filtro; las que no estén aquí van al final en orden alfabético.
+const ORDEN_CAT = ['Aretes', 'Collares', 'Manillas', 'Anillos', 'Pines', 'Pinzas', 'Lanyards']
+const sinTildes = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
 /* ---------------- Rendimiento ---------------- */
 // Google entrega las fotos de Drive en PNG gigante (≈1,8 MB). Pedimos JPG liviano
 // al tamaño justo de la pantalla (≈70 KB): misma foto, carga ~20 veces más rápido.
@@ -81,7 +89,7 @@ function fotoSet(url: string, anchos: number[]) {
 
 // El catálogo se guarda en el navegador: quien vuelve ve la tienda al instante
 // mientras se actualiza por detrás con el inventario real.
-const CACHE_CATALOGO = 'euphoria-catalogo-v1'
+const CACHE_CATALOGO = 'euphoria-catalogo-v2'
 function leerCatalogoGuardado(): Catalogo | null {
   try {
     const raw = localStorage.getItem(CACHE_CATALOGO)
@@ -257,12 +265,51 @@ function Boton({ children, onClick, disabled = false, claro = false, full = fals
   )
 }
 
+// Botones para elegir el color cuando un producto tiene varias variantes.
+function Colores({ variantes, actual, onElegir, grande = false }: {
+  variantes: Producto[]; actual: Producto; onElegir: (p: Producto) => void; grande?: boolean
+}) {
+  if (variantes.length < 2) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <span style={{ fontSize: 9, letterSpacing: '0.28em', color: C.grisClaro, fontFamily: SANS }}>
+        COLOR · <span style={{ color: C.tinta }}>{(actual.color || '').toUpperCase()}</span>
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {variantes.map(v => {
+          const activo = v.id === actual.id
+          return (
+            <button
+              key={v.id}
+              onClick={e => { e.stopPropagation(); onElegir(v) }}
+              aria-pressed={activo}
+              title={v.disponible ? v.color : `${v.color} · agotado`}
+              style={{
+                fontSize: grande ? 11 : 10, letterSpacing: '0.08em', fontFamily: SANS, fontWeight: 400,
+                padding: grande ? '7px 12px' : '5px 9px', cursor: 'pointer', transition: 'all .2s',
+                border: `1px solid ${activo ? C.tinta : C.borde}`,
+                background: activo ? C.tinta : 'transparent',
+                color: activo ? C.crema : v.disponible ? C.tinta : C.grisClaro,
+                textDecoration: v.disponible ? 'none' : 'line-through',
+              }}
+            >
+              {v.color || v.id}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* ---------------- Aplicación ---------------- */
 
 export default function App() {
   const [catalogo, setCatalogo] = useState<Catalogo | null>(leerCatalogoGuardado)
   const [error, setError] = useState('')
   const [coleccion, setColeccion] = useState('Todas')
+  const [categoria, setCategoria] = useState('Todas')
+  const [elegido, setElegido] = useState<Record<string, string>>({}) // código base → variante elegida
   const [soloDisponibles, setSoloDisponibles] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [pagina, setPagina] = useState(1)
@@ -314,17 +361,54 @@ export default function App() {
   const whatsapp = catalogo?.whatsapp || ''
   const contacto = whatsapp ? waUrl(whatsapp, 'Hola Euphoria ⚡ quiero hacer una consulta') : INSTAGRAM
 
+  // Todas las variantes de cada producto (mismo código base), en el orden del catálogo.
+  const familias = useMemo(() => {
+    const m: Record<string, Producto[]> = {}
+    catalogo?.productos.forEach(p => { (m[baseDe(p)] ||= []).push(p) })
+    return m
+  }, [catalogo])
+  const variantesDe = (p: Producto) => familias[baseDe(p)] || [p]
+
+  const categorias = useMemo(() => {
+    const s = new Set<string>()
+    catalogo?.productos.forEach(p => { if (p.tipo) s.add(p.tipo) })
+    return [...s].sort((a, b) => {
+      const ia = ORDEN_CAT.indexOf(a) === -1 ? 99 : ORDEN_CAT.indexOf(a)
+      const ib = ORDEN_CAT.indexOf(b) === -1 ? 99 : ORDEN_CAT.indexOf(b)
+      return ia - ib || a.localeCompare(b, 'es')
+    })
+  }, [catalogo])
+
+  // Un producto aparece una sola vez aunque tenga varios colores.
   const filtrados = useMemo(() => {
     if (!catalogo) return []
-    const q = busqueda.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    return catalogo.productos.filter(p =>
+    const q = sinTildes(busqueda.trim())
+    const pasa = (p: Producto) =>
       (coleccion === 'Todas' || p.coleccion === coleccion) &&
+      (categoria === 'Todas' || p.tipo === categoria) &&
       (!soloDisponibles || p.disponible) &&
-      (!q || `${p.nombre} ${p.detalle} ${p.coleccion} ${p.tipo}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q)),
-    )
-  }, [catalogo, coleccion, soloDisponibles, busqueda])
+      (!q || sinTildes(`${p.nombre} ${p.detalle} ${p.coleccion} ${p.tipo} ${p.color || ''}`).includes(q))
+    const vistos = new Set<string>()
+    const out: Producto[][] = []
+    catalogo.productos.forEach(p => {
+      const b = baseDe(p)
+      if (vistos.has(b)) return
+      const vs = (familias[b] || [p]).filter(pasa)
+      if (!vs.length) return
+      vistos.add(b)
+      out.push(vs)
+    })
+    return out
+  }, [catalogo, familias, coleccion, categoria, soloDisponibles, busqueda])
 
-  useEffect(() => setPagina(1), [coleccion, soloDisponibles, busqueda])
+  // Variante que se muestra en la tarjeta: la elegida, o la primera disponible.
+  // Colores que se ofrecen: todos (los agotados salen tachados), salvo con "solo disponibles".
+  const opciones = (vs: Producto[], p: Producto) => soloDisponibles ? vs : variantesDe(p)
+  const varianteActual = (vs: Producto[]) =>
+    opciones(vs, vs[0]).find(v => v.id === elegido[baseDe(vs[0])]) || vs.find(v => v.disponible) || vs[0]
+  const elegir = (v: Producto) => setElegido(e => ({ ...e, [baseDe(v)]: v.id }))
+
+  useEffect(() => setPagina(1), [coleccion, categoria, soloDisponibles, busqueda])
 
   const lineas = Object.entries(carrito)
     .map(([id, cantidad]) => ({ p: porId[id], cantidad }))
@@ -374,7 +458,7 @@ export default function App() {
   }
 
   const visibles = filtrados.slice(0, pagina * POR_PAGINA)
-  const disponibles = catalogo?.productos.filter(p => p.disponible).length || 0
+  const disponibles = Object.values(familias).filter(vs => vs.some(v => v.disponible)).length
 
   return (
     <div style={{ background: C.arena, minHeight: '100vh' }}>
@@ -475,6 +559,25 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {categorias.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }} aria-label="Categorías">
+                  {['Todas', ...categorias].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCategoria(c)}
+                      className="flex-none"
+                      style={{
+                        fontSize: 10, letterSpacing: '0.2em', padding: '7px 13px', fontFamily: SANS,
+                        border: 'none', borderBottom: `1px solid ${categoria === c ? C.rojo : 'transparent'}`,
+                        background: 'transparent',
+                        color: categoria === c ? C.rojo : C.gris, cursor: 'pointer', transition: 'all .2s',
+                      }}
+                    >
+                      {c === 'Todas' ? 'TODO TIPO DE PIEZA' : c.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-4 justify-between">
                 <input
                   value={busqueda}
@@ -520,10 +623,10 @@ export default function App() {
                 </p>
               )}
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-                {visibles.map((p, idx) => (
-                  <article key={p.id} className="product-card flex flex-col" style={{ border: `1px solid ${C.borde}`, background: C.papel }}>
+                {visibles.map((vs, idx) => { const p = varianteActual(vs); return (
+                  <article key={baseDe(p)} className="product-card flex flex-col" style={{ border: `1px solid ${C.borde}`, background: C.papel }}>
                     <div className="overflow-hidden relative cursor-pointer" style={{ background: C.arena, aspectRatio: '3/4' }} onClick={() => setDetalle(p)}>
-                      <Galeria p={p} prioridad={idx < 3} />
+                      <Galeria key={p.id} p={p} prioridad={idx < 3} />
                       {!p.disponible && (
                         <div className="absolute top-3 right-3" style={{ background: C.tinta, color: C.crema, fontSize: 9, letterSpacing: '0.34em', padding: '6px 10px', fontFamily: SANS }}>
                           AGOTADO
@@ -539,7 +642,11 @@ export default function App() {
                       <div className="flex flex-col gap-1 cursor-pointer" onClick={() => setDetalle(p)}>
                         <h3 style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 22, margin: 0, letterSpacing: '0.02em', lineHeight: 1.2 }}>{p.nombre}</h3>
                         {p.detalle && <p style={{ fontSize: 12, color: C.gris, margin: 0, letterSpacing: '0.04em', fontWeight: 300 }}>{p.detalle}</p>}
+                        {p.color && opciones(vs, p).length < 2 && (
+                          <p style={{ fontSize: 12, color: C.gris, margin: 0, letterSpacing: '0.04em', fontWeight: 300 }}>Color: {p.color}</p>
+                        )}
                       </div>
+                      <Colores variantes={opciones(vs, p)} actual={p} onElegir={elegir} />
                       <div className="flex items-center justify-between gap-2 mt-auto flex-wrap">
                         <span style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 23, color: p.disponible ? C.tinta : C.grisClaro }}>{pesos(p.precio)}</span>
                         {p.disponible ? (
@@ -552,7 +659,7 @@ export default function App() {
                       </div>
                     </div>
                   </article>
-                ))}
+                ) })}
               </div>
               {visibles.length < filtrados.length && (
                 <div className="mt-10 flex justify-center">
@@ -668,7 +775,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ background: 'rgba(20,18,15,0.6)' }} onClick={() => setDetalle(null)}>
           <div className="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto grid sm:grid-cols-2" style={{ background: C.papel }} onClick={e => e.stopPropagation()}>
             <div className="relative" style={{ aspectRatio: '3/4', background: C.arena }}>
-              <Galeria p={detalle} grande />
+              <Galeria key={detalle.id} p={detalle} grande />
             </div>
             <div className="p-7 flex flex-col gap-5">
               <div className="flex justify-between items-start gap-4">
@@ -677,6 +784,10 @@ export default function App() {
               </div>
               <h3 style={{ fontFamily: SERIF, fontWeight: 500, fontSize: 32, margin: 0, lineHeight: 1.1 }}>{detalle.nombre}</h3>
               {detalle.detalle && <p style={{ fontSize: 14, color: C.gris, margin: 0, fontWeight: 300 }}>{detalle.detalle}</p>}
+              {detalle.color && variantesDe(detalle).length < 2 && (
+                <p style={{ fontSize: 14, color: C.gris, margin: 0, fontWeight: 300 }}>Color: {detalle.color}</p>
+              )}
+              <Colores variantes={variantesDe(detalle)} actual={detalle} onElegir={v => { elegir(v); setDetalle(v) }} grande />
               <span style={{ fontFamily: SERIF, fontSize: 28 }}>{pesos(detalle.precio)}</span>
               {detalle.disponible ? (
                 <>
@@ -690,7 +801,7 @@ export default function App() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <span style={{ fontSize: 11, letterSpacing: '0.3em', color: C.rojo }}>AGOTADO</span>
-                  <a href={whatsapp ? waUrl(whatsapp, `Hola Euphoria ⚡ ¿van a volver a tener ${detalle.nombre}?`) : INSTAGRAM} target="_blank" rel="noopener noreferrer"
+                  <a href={whatsapp ? waUrl(whatsapp, `Hola Euphoria ⚡ ¿van a volver a tener ${detalle.nombre}${detalle.color ? ` en ${detalle.color}` : ''}?`) : INSTAGRAM} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 13, color: C.tinta, fontWeight: 300 }}>
                     Avísame cuando vuelva →
                   </a>
@@ -730,6 +841,7 @@ export default function App() {
                       <div className="flex-1 flex flex-col gap-1 min-w-0">
                         <span style={{ fontFamily: SERIF, fontSize: 17, lineHeight: 1.2 }}>{p.nombre}</span>
                         {p.detalle && <span style={{ fontSize: 11, color: C.gris, fontWeight: 300 }}>{p.detalle}</span>}
+                        {p.color && <span style={{ fontSize: 11, color: C.tinta, fontWeight: 400 }}>Color: {p.color}</span>}
                         <div className="flex items-center justify-between mt-auto">
                           <div className="flex items-center" style={{ border: `1px solid ${C.borde}` }}>
                             <button onClick={() => cambiar(p.id, cantidad - 1)} aria-label="Quitar uno" style={{ width: 28, height: 28, background: 'none', border: 'none', cursor: 'pointer' }}>−</button>
