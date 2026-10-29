@@ -11,6 +11,16 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
    ================================================================ */
 const TIENDA_URL = 'https://script.google.com/macros/s/AKfycbxAs1wS__JS9-DOLD17cg-bQlhDgswkB6hU3OHzrhYuXewC3UeOW_X1SnN1KbL30hRBVg/exec'
 const INSTAGRAM = 'https://instagram.com/euphoriaby.dz'
+// WhatsApp de la marca (con indicativo de Colombia). Es el número de respaldo: si el
+// inventario trae uno propio, se usa ese; si no, se usa este.
+const WHATSAPP_MARCA = '573024342490'
+
+/* ---------------- Protección de datos personales (Ley 1581 de 2012) ----------------
+   Completa estos datos con la información legal de la marca. Mientras no haya correo,
+   las solicitudes se reciben por WhatsApp e Instagram. */
+const RESPONSABLE = 'Euphoria · Medellín, Colombia'
+const CORREO_DATOS = '' // ej. 'hola@tudominio.com'
+const POLITICA_VERSION = '2026-10-28'
 
 type Producto = {
   id: string
@@ -127,6 +137,67 @@ function waUrl(numero: string, texto: string) {
 }
 
 /* ---------------- Piezas visuales ---------------- */
+
+function IconoWhatsApp({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.65-1.2A9 9 0 1 0 12 3Z" fill="currentColor" />
+      <path d="M9.2 8.3c.2-.4.5-.4.7-.4h.5c.2 0 .4 0 .5.4l.6 1.5c.1.2 0 .4-.1.6l-.4.5c-.1.1-.2.3 0 .5.5.9 1.3 1.6 2.3 2 .2.1.4.1.5-.1l.6-.7c.2-.2.3-.2.5-.1l1.4.7c.2.1.3.2.3.4 0 .5-.2 1.1-.7 1.4-.5.3-1.2.4-2 .2a9 9 0 0 1-5-4.2c-.4-.7-.7-1.7-.2-2.4Z" fill="#fff" />
+    </svg>
+  )
+}
+
+function PoliticaDatos({ onCerrar, whatsapp }: { onCerrar: () => void; whatsapp: string }) {
+  const h = { fontFamily: SERIF, fontWeight: 600, fontSize: 20, margin: '22px 0 6px' } as const
+  const p = { fontSize: 14, color: C.tinta, fontWeight: 300, lineHeight: 1.65, margin: '0 0 8px' } as const
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center" style={{ background: 'rgba(20,18,15,0.7)' }} onClick={onCerrar}>
+      <div
+        role="dialog" aria-modal="true" aria-label="Política de tratamiento de datos personales"
+        className="w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+        style={{ background: C.papel }}
+        onClick={e => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between px-6 h-16 sticky top-0" style={{ background: C.tinta, color: C.crema }}>
+          <span style={{ fontFamily: SERIF, fontSize: 20 }}>Política de tratamiento de datos</span>
+          <button onClick={onCerrar} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: C.crema, fontSize: 24, cursor: 'pointer' }}>×</button>
+        </header>
+        <div className="px-6 pb-8 pt-2">
+          <p style={{ ...p, color: C.gris, marginTop: 14 }}>Versión {POLITICA_VERSION} · Ley 1581 de 2012 y Decreto 1377 de 2013 (compilado en el Decreto 1074 de 2015)</p>
+
+          <h4 style={h}>1. Responsable del tratamiento</h4>
+          <p style={p}>{RESPONSABLE}. Canales de contacto: WhatsApp{whatsapp ? ` +${whatsapp}` : ''}{CORREO_DATOS ? `, correo ${CORREO_DATOS}` : ''} e Instagram @euphoriaby.dz.</p>
+
+          <h4 style={h}>2. Datos que recogemos</h4>
+          <p style={p}>Cuando haces un pedido te pedimos: nombre completo, celular, dirección de entrega (dirección, barrio, ciudad y departamento) y, de forma opcional, cédula, correo electrónico y notas sobre la entrega. No recogemos datos sensibles ni datos de tarjetas o cuentas bancarias.</p>
+
+          <h4 style={h}>3. Para qué los usamos</h4>
+          <p style={p}>Únicamente para registrar y atender tu pedido, contactarte por WhatsApp o llamada para confirmar el pago y el envío, despachar tu compra, atender garantías, cambios y reclamos, y cumplir obligaciones legales, contables y tributarias. No vendemos ni cedemos tus datos a terceros con fines comerciales. Solo los compartimos con transportadoras o mensajeros cuando es necesario para entregarte tu pedido, y con los proveedores tecnológicos que alojan la tienda.</p>
+
+          <h4 style={h}>4. Autorización</h4>
+          <p style={p}>Al marcar la casilla de autorización antes de hacer tu pedido, aceptas de forma previa, expresa e informada el tratamiento de tus datos para las finalidades descritas. Es voluntario entregarlos, pero sin los datos obligatorios no podemos procesar el pedido. Si eres menor de edad, el pedido debe hacerlo tu padre, madre o representante legal.</p>
+
+          <h4 style={h}>5. Tus derechos</h4>
+          <p style={p}>Como titular puedes conocer, actualizar y rectificar tus datos; solicitar prueba de la autorización; ser informado del uso que les damos; presentar quejas ante la Superintendencia de Industria y Comercio (SIC); revocar la autorización y pedir la supresión de tus datos cuando no exista un deber legal de conservarlos; y acceder gratuitamente a ellos.</p>
+
+          <h4 style={h}>6. Cómo ejercer tus derechos</h4>
+          <p style={p}>Escríbenos por los canales del punto 1 indicando tu nombre y el número de tu pedido. Respondemos las consultas en máximo 10 días hábiles y los reclamos en máximo 15 días hábiles desde su recepción.</p>
+
+          <h4 style={h}>7. Conservación y seguridad</h4>
+          <p style={p}>Conservamos tus datos mientras sea necesario para atender tu pedido y cumplir obligaciones legales, y luego los eliminamos o anonimizamos. Aplicamos medidas razonables para protegerlos contra acceso no autorizado, pérdida o uso indebido.</p>
+
+          <h4 style={h}>8. Almacenamiento en tu navegador</h4>
+          <p style={p}>Esta página guarda en tu propio navegador el contenido de tu bolsa y una copia del catálogo para que cargue más rápido. No usamos cookies de publicidad ni de rastreo.</p>
+
+          <h4 style={h}>9. Cambios a esta política</h4>
+          <p style={p}>Si la actualizamos, publicaremos la nueva versión en esta página con su fecha.</p>
+
+          <div className="mt-6"><Boton claro onClick={onCerrar}>CERRAR</Boton></div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function Bolt({ w = 14, h = 24, color = C.rojo }: { w?: number; h?: number; color?: string }) {
   return <div className="bolt flex-none" style={{ width: w, height: h, background: color }} />
@@ -317,6 +388,8 @@ export default function App() {
   const [carrito, setCarrito] = useState<Carrito>(leerCarrito)
   const [panel, setPanel] = useState<'cerrado' | 'carrito' | 'datos' | 'listo'>('cerrado')
   const [cliente, setCliente] = useState<Cliente>(CLIENTE_VACIO)
+  const [aceptaDatos, setAceptaDatos] = useState(false)
+  const [verPolitica, setVerPolitica] = useState(false)
   const [trampa, setTrampa] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [errorPedido, setErrorPedido] = useState('')
@@ -358,7 +431,7 @@ export default function App() {
     })
   }, [catalogo, porId])
 
-  const whatsapp = catalogo?.whatsapp || ''
+  const whatsapp = WHATSAPP_MARCA
   const contacto = whatsapp ? waUrl(whatsapp, 'Hola Euphoria ⚡ quiero hacer una consulta') : INSTAGRAM
 
   // Todas las variantes de cada producto (mismo código base), en el orden del catálogo.
@@ -440,6 +513,7 @@ export default function App() {
         body: JSON.stringify({
           cliente,
           items: lineas.map(l => ({ id: l.p.id, cantidad: l.cantidad })),
+          autorizacionDatos: { acepta: aceptaDatos, version: POLITICA_VERSION, fecha: new Date().toISOString() },
           website: trampa,
         }),
       })
@@ -448,6 +522,7 @@ export default function App() {
       setResultado(d)
       setCarrito({})
       setCliente(CLIENTE_VACIO)
+      setAceptaDatos(false)
       setPanel('listo')
       cargar()
     } catch (err) {
@@ -754,9 +829,30 @@ export default function App() {
         <div style={{ borderTop: '1px solid #2A2724', maxWidth: 1120 }} className="mx-auto px-6 md:px-16 py-5">
           <p style={{ fontSize: 11, color: '#5C544A', margin: 0, letterSpacing: '0.14em', fontWeight: 300 }}>
             © {new Date().getFullYear()} Euphoria · Medellín, Colombia
+            {' · '}
+            <button onClick={() => setVerPolitica(true)} className="hover:text-[#F4EFE7] transition-colors"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', letterSpacing: 'inherit', textDecoration: 'underline' }}>
+              Política de tratamiento de datos
+            </button>
           </p>
         </div>
       </footer>
+
+      {/* ── WhatsApp flotante ── */}
+      {panel === 'cerrado' && !detalle && !verPolitica && (
+        <a
+          href={contacto}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Escríbenos por WhatsApp"
+          className={`fixed right-5 z-40 flex items-center justify-center shadow-xl hover:scale-105 transition-transform ${unidades > 0 ? 'bottom-24' : 'bottom-5'}`}
+          style={{ width: 54, height: 54, borderRadius: '50%', background: '#25D366', color: '#25D366' }}
+        >
+          <IconoWhatsApp size={30} />
+        </a>
+      )}
+
+      {verPolitica && <PoliticaDatos onCerrar={() => setVerPolitica(false)} whatsapp={whatsapp} />}
 
       {/* ── Bolsa flotante (celular) ── */}
       {unidades > 0 && panel === 'cerrado' && (
@@ -904,6 +1000,15 @@ export default function App() {
                       placeholder="Es un regalo, apartamento, horario de entrega…"
                       style={{ background: C.papel, border: `1px solid ${C.borde}`, padding: '10px 12px', fontSize: 14, fontFamily: SANS, outline: 'none', resize: 'vertical' }} />
                   </label>
+                  <label className="col-span-2 flex items-start gap-3 cursor-pointer" style={{ fontSize: 12, color: C.tinta, fontWeight: 300, lineHeight: 1.55 }}>
+                    <input type="checkbox" required checked={aceptaDatos} onChange={e => setAceptaDatos(e.target.checked)} style={{ accentColor: C.rojo, marginTop: 3, flex: 'none' }} />
+                    <span>
+                      Autorizo a {RESPONSABLE.split(' · ')[0]} el tratamiento de mis datos personales para gestionar mi pedido y contactarme, según la{' '}
+                      <button type="button" onClick={() => setVerPolitica(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: C.rojo, font: 'inherit', textDecoration: 'underline' }}>
+                        política de tratamiento de datos
+                      </button>. *
+                    </span>
+                  </label>
                   {/* Campo oculto anti-spam */}
                   <input tabIndex={-1} autoComplete="off" value={trampa} onChange={e => setTrampa(e.target.value)} name="website" aria-hidden
                     style={{ position: 'absolute', left: -9999, width: 1, height: 1, opacity: 0 }} />
@@ -933,8 +1038,8 @@ export default function App() {
                 <p style={{ fontSize: 14, color: C.gris, margin: 0, fontWeight: 300, lineHeight: 1.6 }}>
                   Recibimos tu pedido por {pesos(resultado.total)}. Te contactaremos muy pronto para confirmar el pago y el envío.
                 </p>
-                {resultado.whatsapp && (
-                  <a href={waUrl(resultado.whatsapp, resultado.mensaje)} target="_blank" rel="noopener noreferrer" className="hover:bg-[#a51e19] transition-colors"
+                {whatsapp && (
+                  <a href={waUrl(whatsapp, resultado.mensaje || `Hola Euphoria ⚡ hice el pedido ${resultado.numero}`)} target="_blank" rel="noopener noreferrer" className="hover:bg-[#a51e19] transition-colors"
                     style={{ background: C.rojo, color: C.crema, fontSize: 11, letterSpacing: '0.26em', padding: '14px 24px', textDecoration: 'none', fontFamily: SANS }}>
                     ENVIAR PEDIDO POR WHATSAPP
                   </a>
